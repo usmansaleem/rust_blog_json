@@ -22,7 +22,8 @@ impl Blog {
         let reader = BufReader::new(file);
 
         // read json from file as vector
-        let blog: Blog = serde_json::from_reader(reader)?;
+        let blog: Blog = serde_json::from_reader(reader)
+            .with_context(|| format!("Error parsing as JSON {}", path.as_ref().display()))?;
 
         Ok(blog)
     }
@@ -35,21 +36,15 @@ impl Blog {
         body: String,
         categories: Vec<BlogCategory>,
     ) {
-        let nid = self.next_id;
-        self.next_id = self.next_id + 1;
-        let create_date = Utc::now().format("%Y-%m-%d").to_string();
-        let modify_date = create_date.clone();
-        let blog_entry = BlogEntry {
-            id: nid,
+        let blog_entry = BlogEntry::new(
+            self.next_id,
             url_friendly_id,
             title,
             description,
             body,
-            blog_section: "Main".to_string(),
-            created_on: create_date,
-            modified_on: modify_date,
             categories,
-        };
+        );
+        self.next_id += 1;
 
         // insert into vec (ownership transferred)
         self.blog_entries.insert(0, blog_entry);
@@ -59,11 +54,13 @@ impl Blog {
         self.blog_entries.retain(|entry| entry.id != id);
     }
 
-    fn find_by_url(&self, url_friendly_id: &String) -> Option<&BlogEntry> {
+    fn find_by_url(&self, url_friendly_id: &'static str) -> Option<&BlogEntry> {
         self.blog_entries
             .iter()
             .find(|entry| entry.url_friendly_id == *url_friendly_id)
     }
+
+    // TODO: Save blog back to file
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -78,6 +75,29 @@ struct BlogEntry {
     created_on: String,
     modified_on: String,
     categories: Vec<BlogCategory>,
+}
+
+impl BlogEntry {
+    fn new(
+        id: u32,
+        url_friendly_id: String,
+        title: String,
+        description: String,
+        body: String,
+        categories: Vec<BlogCategory>,
+    ) -> BlogEntry {
+        BlogEntry {
+            id,
+            url_friendly_id,
+            title,
+            description,
+            body,
+            blog_section: "Main".to_string(),
+            created_on: Utc::now().format("%Y-%m-%d").to_string(),
+            modified_on: Utc::now().format("%Y-%m-%d").to_string(),
+            categories,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -100,10 +120,12 @@ fn main() -> Result<()> {
     println!("Length of blog items: {}", blog.blog_entries.len());
     println!("Next Blog Entry ID: {}", blog.next_id);
 
-    match blog.find_by_url(&"wrapper_over_runas_utility".to_string()) {
-        Some(entry) => println!("{:#?}", entry),
-        _ => println!("Blog Entry Not Found"),
+    if let Some(entry) = blog.find_by_url("wrapper_over_runas_utility") {
+        println!("{:#?}", entry)
+    } else {
+        println!("Unexpected behavior - wrapper_over_runas_utility not found");
     }
+
 
     // insert a new blog entry in blog
     println!("Inserting new Blog Entry");
@@ -118,9 +140,10 @@ fn main() -> Result<()> {
     println!("Length of blog items: {}", blog.blog_entries.len());
     println!("Next Blog Entry ID: {}", blog.next_id);
 
-    match blog.find_by_url(&"new_test".to_string()) {
-        Some(entry) => println!("{:#?}", entry),
-        _ => println!("Blog Entry Not Found"),
+    if let Some(entry) = blog.find_by_url("new_test") {
+        println!("{:#?}", entry)
+    } else {
+        println!("Unexpected behavior - new_test not found");
     }
 
     // delete blog entry 2
@@ -129,8 +152,8 @@ fn main() -> Result<()> {
     println!("Length of blog items: {}", blog.blog_entries.len());
     println!("Next Blog Entry ID: {}", blog.next_id);
 
-    match blog.find_by_url(&"wrapper_over_runas_utility".to_string()) {
-        Some(entry) => println!("{:#?}", entry),
+    match blog.find_by_url("wrapper_over_runas_utility") {
+        Some(entry) => println!("Unexpected - should have been deleted. {:#?}", entry),
         _ => println!("Blog Entry Not Found"),
     }
 
